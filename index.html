@@ -36,6 +36,24 @@
   .overlay p{max-width:58cqw;margin:.7cqw 0;font-size:1.05cqw;line-height:1.9}
   .overlay p.small{font-size:.8cqw;color:#c9b8ff}
   .big{font-family:inherit;font-size:1.5cqw;padding:1.3cqw 3cqw;margin-top:1.5cqw;background:#4ade80;color:#102a18;border:.4cqw solid #000;box-shadow:0 .5cqw 0 #1f8a4c;cursor:pointer}
+  #name{font-family:inherit;font-size:1.5cqw;padding:1cqw;width:30cqw;text-align:center;background:#000;color:#ffd23f;border:.35cqw solid #fff;margin-top:1.2cqw;outline:none}
+  #name:focus{border-color:#4ade80}
+  .lbl{font-size:.8cqw;color:#c9b8ff;margin-top:1.2cqw}
+  .drow{display:flex;gap:1.5cqw;justify-content:center}
+  .big.alt{background:#5b3fa8;color:#fff;box-shadow:0 .5cqw 0 #3a2680}
+  .big.sm{background:#f87171;color:#2a0a0a;box-shadow:0 .5cqw 0 #a02020;font-size:1cqw}
+  .dash{z-index:8;justify-content:flex-start;padding-top:2.2cqw}
+  .dgrid{display:grid;grid-template-columns:1fr 1fr;gap:2.5cqw;width:90cqw;text-align:left;margin-top:.8cqw}
+  .dname{font-size:1.3cqw;color:#4ade80;margin-bottom:.8cqw}
+  .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:.8cqw}
+  .card{background:#2a1b52;border:.25cqw solid #fff;padding:.7cqw;text-align:center;font-size:.7cqw}
+  .card b{display:block;font-size:1.4cqw;color:#ffd23f;margin-top:.5cqw}
+  .dsub{font-size:.85cqw;color:#ffd23f;margin:1.2cqw 0 .6cqw}
+  #dRecent div{font-size:.8cqw;line-height:2}
+  #dBoard{width:100%;border-collapse:collapse;font-size:.8cqw;line-height:2}
+  #dBoard th,#dBoard td{padding:.3cqw .5cqw;border-bottom:.1cqw dashed #5b3fa8;text-align:left}
+  #dBoard th{color:#c9b8ff;font-weight:normal}
+  #dBoard tr.me td{color:#4ade80}
 </style>
 </head>
 <body>
@@ -46,7 +64,7 @@
     <div class="chip">RACE<b id="hRace">1</b></div>
     <div class="chip">POSITION<b id="hPos">-</b></div>
     <div class="chip">COMBO<b id="hStreak">0</b></div>
-    <div class="chip">WINS<b id="hWins">0</b></div>
+    <div class="chip" style="flex:1.3">PLAYER<b id="hName" style="font-size:1cqw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Player</b></div>
     <div class="chip">BEST TIME<b id="hBest">--</b></div>
     <button class="tool" id="tNum">NUMBERS<br>123</button>
     <button class="tool" id="tSnd">SOUND<br>ON</button>
@@ -61,7 +79,33 @@
     <div class="km sub">អុំទូកគណិត</div>
     <p id="ovText">It's Bon Om Touk! Row your boat to the finish line by solving math fast. Every right answer is a big paddle stroke. Wrong answers slow you down.</p>
     <p class="small">Beat both rival boats to move on to a harder race. Keys 1-4 pick answers. Press F for full screen.</p>
-    <button class="big" id="go">START RACE</button>
+    <div class="lbl">PLAYER NAME / ឈ្មោះអ្នកលេង</div>
+    <input id="name" maxlength="12" placeholder="Type your name" autocomplete="off">
+    <div class="drow">
+      <button class="big" id="go">START RACE</button>
+      <button class="big alt" id="dOpen">DASHBOARD</button>
+    </div>
+  </div>
+
+  <div class="overlay dash hide" id="dash">
+    <h2>DASHBOARD <span class="km">ផ្ទាំងពិន្ទុ</span></h2>
+    <div class="dgrid">
+      <div>
+        <div class="dname" id="dName"></div>
+        <div class="cards" id="dCards"></div>
+        <div class="dsub">RECENT RACES</div>
+        <div id="dRecent"></div>
+      </div>
+      <div>
+        <div class="dsub" style="margin-top:0" id="dBoardTitle">LEADERBOARD</div>
+        <table id="dBoard"></table>
+      </div>
+    </div>
+    <p class="small" id="dNote">Scores are saved in this browser on this device only.</p>
+    <div class="drow">
+      <button class="big" id="dClose">CLOSE</button>
+      <button class="big sm" id="dReset">RESET MY DATA</button>
+    </div>
   </div>
 </div>
 
@@ -72,13 +116,69 @@ var $=function(id){return document.getElementById(id)};
 var cv=$('c'),ctx=cv.getContext('2d');
 ctx.imageSmoothingEnabled=false;
 var KD='០១២៣៤៥៦៧៨៩';
-var STORE_KEY='omToukBestTime';
+var STORE_KEY='omToukDataV2';
+/* Shared online leaderboard (Firebase Realtime Database).
+   Paste your database URL between the quotes, e.g. 'https://your-project-default-rtdb.asia-southeast1.firebasedatabase.app'
+   Leave it empty to keep scores on this device only. */
+var DB_URL='https://boat-math-default-rtdb.asia-southeast1.firebasedatabase.app';
 
 /* ---------- state ---------- */
 var G={phase:'idle',race:1,wins:0,bestTime:0,km:false,sound:true,
   p:[0,0,0],d:[0,0,0],fin:[0,0,0],finOrder:[],elapsed:0,ready:0,
-  q:null,lock:false,streak:0,shake:0,parts:[]};
-try{G.bestTime=parseFloat(localStorage.getItem(STORE_KEY)||'0')||0}catch(e){}
+  q:null,lock:false,streak:0,shake:0,parts:[],name:'Player',ans:0,cor:0,maxStreak:0};
+
+/* ---------- saved data (this browser only) ---------- */
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]})}
+function cleanName(s){s=String(s||'').replace(/\s+/g,' ').trim().slice(0,12);return s||'Player'}
+function loadStore(){
+  try{var s=JSON.parse(localStorage.getItem(STORE_KEY)||'null');if(s&&Array.isArray(s.results))return s}catch(e){}
+  return {last:'',results:[]};
+}
+var store=loadStore();
+G.name=store.last||'Player';
+function saveStore(){try{localStorage.setItem(STORE_KEY,JSON.stringify(store))}catch(e){}}
+function addResult(r){
+  store.results.push(r);
+  if(store.results.length>500)store.results=store.results.slice(-500);
+  saveStore();
+}
+function mine(name){var k=name.toLowerCase();return store.results.filter(function(r){return String(r.n).toLowerCase()===k})}
+function playerStats(name){
+  var rs=mine(name),wins=rs.filter(function(r){return r.place===1}),a=0,c=0,combo=0,best=0,top=0;
+  rs.forEach(function(r){a+=r.ans||0;c+=r.cor||0;if((r.combo||0)>combo)combo=r.combo});
+  wins.forEach(function(r){if(r.t&&(!best||r.t<best))best=r.t;if(r.race>top)top=r.race});
+  return {races:rs.length,wins:wins.length,winRate:rs.length?Math.round(wins.length/rs.length*100):0,
+    bestTime:best,bestCombo:combo,accuracy:a?Math.round(c/a*100):0,topRace:top,recent:rs.slice(-5).reverse()};
+}
+function postScore(r){
+  if(!DB_URL)return;
+  try{
+    fetch(DB_URL.replace(/\/+$/,'')+'/scores.json',{method:'POST',body:JSON.stringify({n:r.n,race:r.race,t:Math.round(r.t*10)/10,ts:r.ts})}).catch(function(){});
+  }catch(e){}
+}
+function fetchWorld(){
+  var u=DB_URL.replace(/\/+$/,'')+'/scores.json?orderBy=%22%24key%22&limitToLast=500';
+  return fetch(u).then(function(r){if(!r.ok)throw new Error('http');return r.json()}).then(function(d){
+    var out=[];
+    if(d)Object.keys(d).forEach(function(k){
+      var v=d[k];
+      if(v&&typeof v.n==='string')out.push({n:v.n.slice(0,12),race:+v.race||1,place:1,t:+v.t||null,ts:+v.ts||0});
+    });
+    return out;
+  });
+}
+function board(list){
+  var by={};
+  (list||store.results).forEach(function(r){
+    var k=String(r.n).toLowerCase();
+    var o=by[k]||(by[k]={name:r.n,wins:0,races:0,best:0,top:0});
+    o.name=r.n;o.races++;
+    if(r.place===1){o.wins++;if(r.race>o.top)o.top=r.race;if(r.t&&(!o.best||r.t<o.best))o.best=r.t}
+  });
+  return Object.keys(by).map(function(k){return by[k]}).sort(function(a,b){
+    return b.top-a.top||b.wins-a.wins||((a.best||999)-(b.best||999));
+  }).slice(0,8);
+}
 
 var BOATS=[
   {name:'YOU', color:'#ffd23f',shirt:'#e63946',y:110},
@@ -155,7 +255,8 @@ function answer(i){
   for(var k=0;k<bs.length;k++)bs[k].disabled=true;
   var delay=300;
   if(i===q.ci){
-    G.streak++;
+    G.streak++;G.ans++;G.cor++;
+    if(G.streak>G.maxStreak)G.maxStreak=G.streak;
     var step=1/NEED;
     var bonus=(G.streak%3===0)?0.03:0;
     G.p[0]=Math.min(1,G.p[0]+step+bonus);
@@ -163,7 +264,7 @@ function answer(i){
     beep(660,.07);setTimeout(function(){beep(880,.1)},70);
     G.parts.push({x:BOATS[0].y?60:60,y:100,t:0,text:bonus?'COMBO!':'PADDLE!',color:'#ffd23f'});
   }else{
-    G.streak=0;
+    G.streak=0;G.ans++;
     G.p[0]=Math.max(0,G.p[0]-0.04);
     G.shake=0.3;delay=650;
     bs[i].classList.add('bad');bs[q.ci].classList.add('ok');
@@ -179,10 +280,13 @@ function answer(i){
 
 /* ---------- flow ---------- */
 function startRace(){
+  G.name=cleanName($('name').value);
+  $('name').value=G.name;
+  store.last=G.name;saveStore();
   if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}}
   if(AC&&AC.state==='suspended')AC.resume();
   G.p=[0,0,0];G.d=[0,0,0];G.fin=[0,0,0];G.finOrder=[];G.elapsed=0;
-  G.streak=0;G.lock=false;G.parts=[];G.q=null;
+  G.streak=0;G.lock=false;G.parts=[];G.q=null;G.ans=0;G.cor=0;G.maxStreak=0;
   G.phase='ready';G.ready=3.2;G.lastCount=4;
   $('overlay').classList.add('hide');
   renderQ();hud();
@@ -197,10 +301,11 @@ function endRace(playerPlace){
   var win=playerPlace===1;
   var t=G.fin[0]||G.elapsed;
   var txt='';
+  var prevBest=playerStats(G.name).bestTime;
+  addResult({n:G.name,race:G.race,place:playerPlace,t:win?t:null,ans:G.ans,cor:G.cor,combo:G.maxStreak,ts:Date.now()});
   if(win){
-    G.wins++;
-    var newBest=false;
-    if(!G.bestTime||t<G.bestTime){G.bestTime=t;newBest=true;try{localStorage.setItem(STORE_KEY,String(t))}catch(e){}}
+    var newBest=(!prevBest||t<prevBest);
+    postScore({n:G.name,race:G.race,t:t,ts:Date.now()});
     G.race++;
     $('ovTitle').textContent='YOU WIN! 1ST PLACE';
     txt='Finish time: <b style="color:#ffd23f">'+t.toFixed(1)+'s</b>'+(newBest?' (NEW BEST!)':'')+'<br>Next up: Race '+G.race+' with faster rivals and harder math.';
@@ -220,8 +325,9 @@ function endRace(playerPlace){
 function hud(){
   $('hRace').textContent=nz(G.race);
   $('hStreak').textContent=nz(G.streak);
-  $('hWins').textContent=nz(G.wins);
-  $('hBest').textContent=G.bestTime?G.bestTime.toFixed(1)+'s':'--';
+  $('hName').textContent=G.name;
+  var bt=playerStats(G.name).bestTime;
+  $('hBest').textContent=bt?bt.toFixed(1)+'s':'--';
   if(G.phase==='race'){
     var me=G.p[0],better=0;
     if(G.p[1]>me)better++;
@@ -368,6 +474,58 @@ function loop(now){
   requestAnimationFrame(loop);
 }
 
+/* ---------- dashboard ---------- */
+var boardToken=0;
+function drawBoard(list,nm){
+  var rows=board(list);
+  var h='<tr><th>#</th><th>PLAYER</th><th>BEST RACE</th><th>WINS</th><th>BEST TIME</th></tr>';
+  if(!rows.length)h+='<tr><td colspan="5">No scores yet.</td></tr>';
+  rows.forEach(function(o,i){
+    h+='<tr'+(o.name.toLowerCase()===nm.toLowerCase()?' class="me"':'')+'><td>'+(i+1)+'</td><td>'+esc(o.name)+'</td><td>'+(o.top||'-')+'</td><td>'+o.wins+'</td><td>'+(o.best?o.best.toFixed(1)+'s':'--')+'</td></tr>';
+  });
+  $('dBoard').innerHTML=h;
+}
+function openDash(){
+  if(G.phase==='race'||G.phase==='ready')return;
+  var nm=cleanName($('name').value||G.name);
+  var st=playerStats(nm);
+  $('dName').textContent='PLAYER: '+nm;
+  var cards=[['RACES',st.races],['WINS',st.wins],['WIN RATE',st.winRate+'%'],
+    ['BEST TIME',st.bestTime?st.bestTime.toFixed(1)+'s':'--'],['BEST COMBO',st.bestCombo],['ACCURACY',st.accuracy+'%']];
+  $('dCards').innerHTML=cards.map(function(c){return '<div class="card">'+c[0]+'<b>'+esc(c[1])+'</b></div>'}).join('');
+  $('dRecent').innerHTML=st.recent.length?st.recent.map(function(r){
+    return '<div>Race '+r.race+' - '+ord(r.place)+(r.t?' - '+r.t.toFixed(1)+'s':'')+'</div>';
+  }).join(''):'<div>No races yet. Go play!</div>';
+  var token=++boardToken;
+  drawBoard(store.results,nm);
+  if(DB_URL){
+    $('dBoardTitle').textContent='WORLD LEADERBOARD (LOADING...)';
+    $('dNote').textContent='Shared online leaderboard: every win from every device counts.';
+    fetchWorld().then(function(list){
+      if(token!==boardToken)return;
+      $('dBoardTitle').textContent='WORLD LEADERBOARD';
+      drawBoard(list,nm);
+    }).catch(function(){
+      if(token!==boardToken)return;
+      $('dBoardTitle').textContent='LEADERBOARD (OFFLINE - THIS DEVICE)';
+    });
+  }else{
+    $('dBoardTitle').textContent='LEADERBOARD';
+    $('dNote').textContent='Scores are saved in this browser on this device only.';
+  }
+  $('dash').classList.remove('hide');
+}
+function closeDash(){$('dash').classList.add('hide')}
+$('dOpen').addEventListener('click',openDash);
+$('dClose').addEventListener('click',closeDash);
+$('dReset').addEventListener('click',function(){
+  var nm=cleanName($('name').value||G.name);
+  if(!window.confirm('Delete all saved results for "'+nm+'" on this device?'))return;
+  var k=nm.toLowerCase();
+  store.results=store.results.filter(function(r){return String(r.n).toLowerCase()!==k});
+  saveStore();hud();openDash();
+});
+
 /* ---------- controls ---------- */
 function toggleFs(){
   try{
@@ -387,11 +545,17 @@ $('tNum').addEventListener('click',function(){
 });
 $('tSnd').addEventListener('click',function(){G.sound=!G.sound;this.innerHTML='SOUND<br>'+(G.sound?'ON':'OFF')});
 document.addEventListener('keydown',function(e){
+  if(!$('dash').classList.contains('hide')){if(e.key==='Escape')closeDash();return}
+  if(e.target&&e.target.tagName==='INPUT'){
+    if(e.key==='Enter'&&!$('overlay').classList.contains('hide')){e.preventDefault();startRace()}
+    return;
+  }
   if(e.key>='1'&&e.key<='4')answer(parseInt(e.key,10)-1);
   else if(e.key==='f'||e.key==='F')toggleFs();
   else if((e.key==='Enter'||e.key===' ')&&!$('overlay').classList.contains('hide')){e.preventDefault();startRace()}
 });
 
+$('name').value=store.last||'';
 hud();
 requestAnimationFrame(loop);
 })();
