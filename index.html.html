@@ -1,0 +1,400 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Om Touk Math - Boat Race</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Sans+Khmer:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#000;overflow:hidden}
+  body{display:flex;align-items:center;justify-content:center;font-family:'Press Start 2P','Noto Sans Khmer',monospace;color:#fff}
+  .game{position:relative;width:min(100vw,calc(100vh * 16 / 9));aspect-ratio:16/9;container-type:size;overflow:hidden;background:#150d2b}
+  canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;display:block}
+  .km{font-family:'Noto Sans Khmer','Khmer OS',sans-serif;font-weight:700;font-size:1.15em}
+  .hud{position:absolute;top:1.4cqw;left:1.4cqw;right:1.4cqw;display:flex;gap:1cqw;align-items:stretch}
+  .chip{flex:1;background:rgba(26,16,51,.88);border:.3cqw solid #fff;box-shadow:.3cqw .3cqw 0 #000;padding:.5cqw .8cqw;font-size:.8cqw;line-height:1.5;text-align:center}
+  .chip b{display:block;font-size:1.3cqw;color:#ffd23f;margin-top:.3cqw}
+  .tool{flex:.7;font-family:inherit;font-size:.75cqw;line-height:1.4;background:#5b3fa8;color:#fff;border:.3cqw solid #fff;box-shadow:.3cqw .3cqw 0 #000;cursor:pointer}
+  .tool:hover{background:#7a5ad0}
+  .eq{position:absolute;left:22%;right:22%;bottom:19.5%;text-align:center;font-size:3.4cqw;line-height:1.5;padding:.7cqw 1cqw;background:rgba(26,16,51,.92);border:.35cqw solid #fff;box-shadow:.35cqw .35cqw 0 #000;color:#ffd23f;visibility:hidden}
+  .eq.show{visibility:visible}
+  .answers{position:absolute;left:4cqw;right:4cqw;bottom:2.2cqw;display:grid;grid-template-columns:repeat(4,1fr);gap:1.2cqw;visibility:hidden}
+  .answers.show{visibility:visible}
+  .ans{font-family:inherit;font-size:2.2cqw;padding:1cqw .4cqw;background:#ffd23f;color:#222;border:.35cqw solid #000;box-shadow:0 .5cqw 0 #a37b00;cursor:pointer}
+  .ans:active{transform:translateY(.4cqw);box-shadow:0 .1cqw 0 #a37b00}
+  .ans .k{display:block;font-size:.7cqw;color:#7a5b00;margin-bottom:.4cqw}
+  .ans.ok{background:#4ade80;box-shadow:0 .5cqw 0 #1f8a4c}
+  .ans.bad{background:#f87171;box-shadow:0 .5cqw 0 #a02020}
+  .ans:disabled{cursor:default}
+  .overlay{position:absolute;inset:0;background:rgba(21,13,43,.94);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:2cqw;z-index:5}
+  .overlay.hide{display:none}
+  .overlay h2{color:#ffd23f;font-size:2.8cqw;margin:0 0 .8cqw;text-shadow:.3cqw .3cqw 0 #000}
+  .overlay .sub{font-size:3.2cqw;margin-bottom:1cqw}
+  .overlay p{max-width:58cqw;margin:.7cqw 0;font-size:1.05cqw;line-height:1.9}
+  .overlay p.small{font-size:.8cqw;color:#c9b8ff}
+  .big{font-family:inherit;font-size:1.5cqw;padding:1.3cqw 3cqw;margin-top:1.5cqw;background:#4ade80;color:#102a18;border:.4cqw solid #000;box-shadow:0 .5cqw 0 #1f8a4c;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="game" id="game">
+  <canvas id="c" width="320" height="180"></canvas>
+
+  <div class="hud">
+    <div class="chip">RACE<b id="hRace">1</b></div>
+    <div class="chip">POSITION<b id="hPos">-</b></div>
+    <div class="chip">COMBO<b id="hStreak">0</b></div>
+    <div class="chip">WINS<b id="hWins">0</b></div>
+    <div class="chip">BEST TIME<b id="hBest">--</b></div>
+    <button class="tool" id="tNum">NUMBERS<br>123</button>
+    <button class="tool" id="tSnd">SOUND<br>ON</button>
+    <button class="tool" id="tFs">FULL<br>SCREEN</button>
+  </div>
+
+  <div class="eq" id="eq"></div>
+  <div class="answers" id="answers"></div>
+
+  <div class="overlay" id="overlay">
+    <h2 id="ovTitle">OM TOUK MATH</h2>
+    <div class="km sub">អុំទូកគណិត</div>
+    <p id="ovText">It's Bon Om Touk! Row your boat to the finish line by solving math fast. Every right answer is a big paddle stroke. Wrong answers slow you down.</p>
+    <p class="small">Beat both rival boats to move on to a harder race. Keys 1-4 pick answers. Press F for full screen.</p>
+    <button class="big" id="go">START RACE</button>
+  </div>
+</div>
+
+<script>
+(function(){
+'use strict';
+var $=function(id){return document.getElementById(id)};
+var cv=$('c'),ctx=cv.getContext('2d');
+ctx.imageSmoothingEnabled=false;
+var KD='០១២៣៤៥៦៧៨៩';
+var STORE_KEY='omToukBestTime';
+
+/* ---------- state ---------- */
+var G={phase:'idle',race:1,wins:0,bestTime:0,km:false,sound:true,
+  p:[0,0,0],d:[0,0,0],fin:[0,0,0],finOrder:[],elapsed:0,ready:0,
+  q:null,lock:false,streak:0,shake:0,parts:[]};
+try{G.bestTime=parseFloat(localStorage.getItem(STORE_KEY)||'0')||0}catch(e){}
+
+var BOATS=[
+  {name:'YOU', color:'#ffd23f',shirt:'#e63946',y:110},
+  {name:'RED', color:'#e63946',shirt:'#fff',   y:84},
+  {name:'BLUE',color:'#4aa3ff',shirt:'#ffd23f',y:58}
+];
+var TRACK_X0=14,TRACK_LEN=204,FINISH_X=288,NEED=12;
+
+/* ---------- helpers ---------- */
+function rnd(a,b){return a+Math.floor(Math.random()*(b-a+1))}
+function pick(a){return a[Math.floor(Math.random()*a.length)]}
+function shuffle(a){for(var i=a.length-1;i>0;i--){var j=Math.floor(Math.random()*(i+1));var t=a[i];a[i]=a[j];a[j]=t}return a}
+function nz(s){s=String(s);if(G.km)s=s.replace(/\d/g,function(d){return KD[d]});return s}
+function ord(n){return n===1?'1st':n===2?'2nd':'3rd'}
+
+/* ---------- audio ---------- */
+var AC=null;
+function beep(f,d,type,v){
+  if(!G.sound||!AC)return;
+  var o=AC.createOscillator(),g=AC.createGain();
+  o.type=type||'square';o.frequency.value=f;g.gain.value=v||.05;
+  o.connect(g);g.connect(AC.destination);o.start();
+  g.gain.exponentialRampToValueAtTime(.0001,AC.currentTime+d);o.stop(AC.currentTime+d);
+}
+
+/* ---------- math ---------- */
+function gen(L){
+  var ops=['+','-'];if(L>=2)ops.push('x');
+  var op=pick(ops),a,b,c,ans,txt,m;
+  if(L>=4&&Math.random()<0.3){
+    a=rnd(20,80);b=rnd(5,40);c=rnd(1,a+b-1);ans=a+b-c;txt=a+' + '+b+' − '+c;
+    return finish(txt,ans,[]);
+  }
+  if(op==='+'){
+    m=L===1?12:L===2?40:L===3?80:150;
+    a=rnd(2,m);b=rnd(2,m);ans=a+b;txt=a+' + '+b;
+  }else if(op==='-'){
+    m=L===1?15:L===2?50:L===3?90:160;
+    a=rnd(6,m);b=rnd(1,a-1);ans=a-b;txt=a+' − '+b;
+  }else{
+    var mx=L===2?5:L===3?9:12;
+    a=rnd(2,mx);b=rnd(2,mx);ans=a*b;txt=a+' × '+b;
+    return finish(txt,ans,[a,-a,b,-b]);
+  }
+  return finish(txt,ans,[]);
+}
+function finish(txt,ans,extra){
+  var offs=[1,-1,2,-2,10,-10,3,-3].concat(extra);
+  var seen={},pool=[];
+  offs.forEach(function(o){var v=ans+o;if(v>=0&&v!==ans&&!seen[v]){seen[v]=1;pool.push(v)}});
+  var wrong=shuffle(pool).slice(0,3);
+  var opts=shuffle([ans].concat(wrong));
+  return {txt:txt,ans:ans,opts:opts,ci:opts.indexOf(ans)};
+}
+
+function renderQ(){
+  var q=G.q;
+  if(!q){$('eq').classList.remove('show');$('answers').classList.remove('show');return}
+  $('eq').textContent=nz(q.txt)+' = ?';
+  var h='';
+  q.opts.forEach(function(v,i){h+='<button class="ans" data-i="'+i+'"><span class="k">['+(i+1)+']</span>'+nz(v)+'</button>'});
+  $('answers').innerHTML=h;
+  var bs=$('answers').querySelectorAll('.ans');
+  for(var i=0;i<bs.length;i++){(function(b){b.addEventListener('click',function(){answer(+b.getAttribute('data-i'))})})(bs[i])}
+  var on=G.phase==='race';
+  $('eq').classList.toggle('show',on);
+  $('answers').classList.toggle('show',on);
+}
+
+function answer(i){
+  if(G.phase!=='race'||G.lock||!G.q)return;
+  G.lock=true;
+  var q=G.q,bs=$('answers').querySelectorAll('.ans');
+  for(var k=0;k<bs.length;k++)bs[k].disabled=true;
+  var delay=300;
+  if(i===q.ci){
+    G.streak++;
+    var step=1/NEED;
+    var bonus=(G.streak%3===0)?0.03:0;
+    G.p[0]=Math.min(1,G.p[0]+step+bonus);
+    bs[i].classList.add('ok');
+    beep(660,.07);setTimeout(function(){beep(880,.1)},70);
+    G.parts.push({x:BOATS[0].y?60:60,y:100,t:0,text:bonus?'COMBO!':'PADDLE!',color:'#ffd23f'});
+  }else{
+    G.streak=0;
+    G.p[0]=Math.max(0,G.p[0]-0.04);
+    G.shake=0.3;delay=650;
+    bs[i].classList.add('bad');bs[q.ci].classList.add('ok');
+    beep(160,.25,'sawtooth',.06);
+    G.parts.push({x:60,y:100,t:0,text:'SLOWED!',color:'#f87171'});
+  }
+  hud();
+  setTimeout(function(){
+    if(G.phase!=='race')return;
+    G.lock=false;G.q=gen(G.race);renderQ();
+  },delay);
+}
+
+/* ---------- flow ---------- */
+function startRace(){
+  if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}}
+  if(AC&&AC.state==='suspended')AC.resume();
+  G.p=[0,0,0];G.d=[0,0,0];G.fin=[0,0,0];G.finOrder=[];G.elapsed=0;
+  G.streak=0;G.lock=false;G.parts=[];G.q=null;
+  G.phase='ready';G.ready=3.2;G.lastCount=4;
+  $('overlay').classList.add('hide');
+  renderQ();hud();
+}
+function beginRacing(){
+  G.phase='race';G.q=gen(G.race);renderQ();
+  beep(880,.25);
+}
+function endRace(playerPlace){
+  G.phase='done';
+  $('eq').classList.remove('show');$('answers').classList.remove('show');
+  var win=playerPlace===1;
+  var t=G.fin[0]||G.elapsed;
+  var txt='';
+  if(win){
+    G.wins++;
+    var newBest=false;
+    if(!G.bestTime||t<G.bestTime){G.bestTime=t;newBest=true;try{localStorage.setItem(STORE_KEY,String(t))}catch(e){}}
+    G.race++;
+    $('ovTitle').textContent='YOU WIN! 1ST PLACE';
+    txt='Finish time: <b style="color:#ffd23f">'+t.toFixed(1)+'s</b>'+(newBest?' (NEW BEST!)':'')+'<br>Next up: Race '+G.race+' with faster rivals and harder math.';
+    $('go').textContent='NEXT RACE';
+    beep(523,.1);setTimeout(function(){beep(659,.1)},110);setTimeout(function(){beep(784,.25)},220);
+  }else{
+    $('ovTitle').textContent=ord(playerPlace)+' PLACE';
+    txt='So close! Finish 1st to move up.<br>Tip: pick quickly and build a combo for a bonus boost.';
+    $('go').textContent='TRY AGAIN';
+    beep(300,.15);setTimeout(function(){beep(220,.3)},150);
+  }
+  $('ovText').innerHTML=txt;
+  $('overlay').classList.remove('hide');
+  hud();
+}
+
+function hud(){
+  $('hRace').textContent=nz(G.race);
+  $('hStreak').textContent=nz(G.streak);
+  $('hWins').textContent=nz(G.wins);
+  $('hBest').textContent=G.bestTime?G.bestTime.toFixed(1)+'s':'--';
+  if(G.phase==='race'){
+    var me=G.p[0],better=0;
+    if(G.p[1]>me)better++;
+    if(G.p[2]>me)better++;
+    $('hPos').textContent=ord(better+1);
+  }else if(G.phase==='idle'||G.phase==='ready'){$('hPos').textContent='-'}
+}
+
+function aiBase(i){
+  var r=Math.min(G.race,12);
+  var base=0.019+0.0026*(r-1);
+  if(base>0.038)base=0.038;
+  return i===1?base:base*0.9;
+}
+
+/* ---------- drawing ---------- */
+function R(x,y,w,h,c){ctx.fillStyle=c;ctx.fillRect(Math.round(x),Math.round(y),w,h)}
+function tower(cx,baseY,w,tiers,col){
+  for(var t=0;t<tiers;t++){var ww=w-t*4;if(ww<4)ww=4;R(cx-ww/2,baseY-(t+1)*5,ww,5,col)}
+  R(cx-1,baseY-tiers*5-9,2,9,col);
+}
+function scene(t){
+  var bands=['#2a1b52','#3a2366','#4a2c78','#5e3685','#744190','#8e4d96'];
+  for(var i=0;i<bands.length;i++)R(0,i*8,320,8,bands[i]);
+  /* moon */
+  for(var dy=-10;dy<=10;dy++){var w=Math.floor(Math.sqrt(100-dy*dy))*2;R(260-w/2,24+dy,w,1,'#fff6c8')}
+  R(255,20,3,3,'#e8dca0');R(262,27,4,3,'#e8dca0');
+  /* skyline: royal palace spires */
+  var dark='#1d1238';
+  R(100,40,130,10,dark);
+  tower(165,40,26,5,dark);tower(130,40,16,3,dark);tower(200,40,16,3,dark);tower(110,40,10,2,dark);tower(220,40,10,2,dark);
+  /* bunting */
+  R(0,12,320,1,'#ddd');
+  for(var x=2;x<320;x+=10){
+    var col=['#e63946','#ffd23f','#4aa3ff','#4ade80'][(x/10)%4|0];
+    R(x,13,6,2,col);R(x+1,15,4,2,col);R(x+2,17,2,2,col);
+  }
+  /* river */
+  R(0,50,320,90,'#2a6fb0');
+  for(var y=50;y<140;y+=10)R(0,y,320,5,'#2f78bd');
+  for(var r=0;r<9;r++){
+    var yy=54+r*10;
+    for(var k=0;k<14;k++){
+      var xx=((k*29+r*17+t/40*(1+r%3*.4))%340)-10;
+      R(xx,yy,6,1,'rgba(255,255,255,.35)');
+    }
+  }
+  /* lane buoys */
+  [78,104].forEach(function(y){for(var x=6;x<300;x+=14)R(x,y,2,2,(x/14|0)%2?'#fff':'#e63946')});
+  /* finish */
+  R(FINISH_X,50,2,90,'#fff');
+  for(var cy=50;cy<140;cy+=4){R(FINISH_X+2,cy,3,2,(cy/4|0)%2?'#000':'#fff');R(FINISH_X+5,cy+2,3,2,(cy/4|0)%2?'#fff':'#000')}
+  R(FINISH_X-6,44,16,6,'#e63946');R(FINISH_X-4,46,12,2,'#ffd23f');
+  /* dock / ground */
+  R(0,140,320,40,'#5a3d22');R(0,140,320,3,'#8b5a2b');
+  for(var px=0;px<320;px+=20)R(px,143,1,37,'#46301a');
+}
+function boat(x,y,b,t,idx){
+  x=Math.round(x);
+  /* shadow on water */
+  R(x+2,y+15,60,2,'rgba(0,0,0,.25)');
+  /* hull */
+  R(x,y+8,60,6,b.color);
+  R(x+60,y+6,3,4,b.color);R(x+62,y+3,2,4,b.color);
+  R(x-3,y+6,3,4,b.color);R(x-4,y+3,2,4,b.color);
+  R(x+2,y+9,56,1,'#fff6c8');
+  /* rowers */
+  var stroke=(Math.floor(t/130+idx*2)%2)===0;
+  for(var i=0;i<10;i++){
+    var rx=x+4+i*5.6;
+    R(rx,y+1,3,7,b.shirt);
+    R(rx,y-2,3,3,'#d9a066');
+    if(stroke){R(rx+3,y+8,5,1,'#e8d9b0');R(rx+7,y+9,2,2,'#e8d9b0')}
+    else{R(rx-4,y+9,5,1,'#e8d9b0');R(rx-5,y+10,2,2,'#e8d9b0')}
+  }
+  /* name label */
+  ctx.font='bold 7px monospace';ctx.textAlign='left';
+  ctx.fillStyle='#000';ctx.fillText(b.name,x+1,y-3);
+  ctx.fillStyle='#fff';ctx.fillText(b.name,x,y-4);
+}
+function drawParts(dt){
+  ctx.font='bold 9px monospace';ctx.textAlign='center';
+  G.parts=G.parts.filter(function(p){return p.t<1});
+  G.parts.forEach(function(p){
+    p.t+=dt*1.3;
+    var py=p.y-p.t*22;
+    ctx.fillStyle='#000';ctx.fillText(p.text,p.x+1,py+1);
+    ctx.fillStyle=p.color;ctx.fillText(p.text,p.x,py);
+  });
+}
+function countdown(){
+  var n=Math.ceil(G.ready-0.2);
+  var txt=n>=1?String(n):'GO!';
+  if(G.ready<=0.2)txt='GO!';
+  ctx.font='bold 40px monospace';ctx.textAlign='center';
+  ctx.fillStyle='#000';ctx.fillText(txt,162,102);
+  ctx.fillStyle='#ffd23f';ctx.fillText(txt,160,100);
+  var shown=(G.ready<=0.2)?0:n;
+  if(shown!==G.lastCount){G.lastCount=shown;beep(shown?440:880,.15)}
+}
+
+/* ---------- loop ---------- */
+var last=performance.now();
+function loop(now){
+  var dt=Math.min(0.1,(now-last)/1000);last=now;
+
+  if(G.phase==='ready'){
+    G.ready-=dt;
+    if(G.ready<=0)beginRacing();
+  }else if(G.phase==='race'){
+    G.elapsed+=dt;
+    for(var i=1;i<=2;i++){
+      if(G.fin[i])continue;
+      var sp=aiBase(i)*(1+0.28*Math.sin(G.elapsed*0.9+i*2.1));
+      var diff=G.p[i]-G.p[0];
+      if(diff>0.25)sp*=0.88;
+      if(diff<-0.25)sp*=1.08;
+      G.p[i]=Math.min(1,G.p[i]+sp*dt);
+      if(G.p[i]>=1&&!G.fin[i]){G.fin[i]=G.elapsed;G.finOrder.push(i)}
+    }
+    if(G.p[0]>=1&&!G.fin[0]){
+      G.fin[0]=G.elapsed;G.finOrder.push(0);
+      endRace(G.finOrder.length);
+    }else if(G.fin[1]&&G.fin[2]){
+      endRace(3);
+    }
+    hud();
+  }
+  for(var j=0;j<3;j++){G.d[j]+=(G.p[j]-G.d[j])*Math.min(1,dt*(j===0?7:30))}
+  if(G.shake>0)G.shake-=dt;
+
+  ctx.save();
+  if(G.shake>0)ctx.translate(Math.round((Math.random()-.5)*3),Math.round((Math.random()-.5)*3));
+  scene(now);
+  /* draw top lanes first so the player boat is on top */
+  for(var k=2;k>=0;k--){
+    var bx=TRACK_X0+G.d[k]*TRACK_LEN;
+    var bob=Math.round(Math.sin(now/220+k)*1);
+    boat(bx,BOATS[k].y+bob,BOATS[k],now,k);
+  }
+  drawParts(dt);
+  if(G.phase==='ready')countdown();
+  ctx.restore();
+  requestAnimationFrame(loop);
+}
+
+/* ---------- controls ---------- */
+function toggleFs(){
+  try{
+    if(document.fullscreenElement){document.exitFullscreen()}
+    else if($('game').requestFullscreen){$('game').requestFullscreen()}
+  }catch(e){}
+}
+$('go').addEventListener('click',startRace);
+$('tFs').addEventListener('click',toggleFs);
+$('tNum').addEventListener('click',function(){
+  G.km=!G.km;this.innerHTML='NUMBERS<br>'+(G.km?'១២៣':'123');
+  hud();
+  if(G.q){
+    var locked=G.lock;renderQ();
+    if(locked){var bs=$('answers').querySelectorAll('.ans');for(var i=0;i<bs.length;i++)bs[i].disabled=true}
+  }
+});
+$('tSnd').addEventListener('click',function(){G.sound=!G.sound;this.innerHTML='SOUND<br>'+(G.sound?'ON':'OFF')});
+document.addEventListener('keydown',function(e){
+  if(e.key>='1'&&e.key<='4')answer(parseInt(e.key,10)-1);
+  else if(e.key==='f'||e.key==='F')toggleFs();
+  else if((e.key==='Enter'||e.key===' ')&&!$('overlay').classList.contains('hide')){e.preventDefault();startRace()}
+});
+
+hud();
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
